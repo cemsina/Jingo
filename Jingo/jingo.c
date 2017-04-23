@@ -16,9 +16,14 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
-#define EDGE_SIZE 8
-
-#pragma region Type Definitions
+#define COLOR_COUNT 8
+#define GET_PTR(type,list,i)	((type *) list.ArrayPointer + i)
+#define GET(type,list,i)	*GET_PTR(type,list,i)
+#define ADD(type,list,item) if (list.Length == 0) list.ArrayPointer = (type *) malloc(sizeof(type));\
+							else list.ArrayPointer = realloc(list.ArrayPointer, sizeof(type)*(list.Length + 1));\
+							*(GET_PTR(type,list,list.Length)) = item; list.Length++
+#define NewList	{NULL,0}
+/* TYPE DEFINITIONS */
 typedef enum {
     Red, Green, Blue, Yellow, Purple, Grey, Pink, Orange,Empty
 } Color;
@@ -26,14 +31,10 @@ typedef struct {
     int x;
     int y;
 } Position;
-typedef enum TypeEnum {
-    INT, POSITION, COLOR, LIST
-} TYPE;
 typedef struct {
     void * ArrayPointer;
     unsigned int Length;
-    TYPE Type;
-} List;
+}  List ;
 typedef struct {
     float x;
     float y;
@@ -47,9 +48,13 @@ typedef struct{
     Direction direction;
     ALLEGRO_MOUSE_STATE state;
 } Mouse;
-#pragma endregion
-#pragma region Globals
-Color Table[EDGE_SIZE][EDGE_SIZE];
+typedef struct {
+	Location start;
+	Location end;
+	Color color;
+}FallingObject;
+/* GLOBALS*/
+Color Table[COLOR_COUNT][COLOR_COUNT];
 ALLEGRO_DISPLAY * display;
 ALLEGRO_FONT * font;
 float Unit;
@@ -59,41 +64,9 @@ float GameTableLength;
 ALLEGRO_COLOR TableBackgroundColor;
 Mouse mouse;
 bool isGameActive;
-#pragma endregion
-#pragma region Game Functions
+/* FUNCTIONS */
 Position NewPosition(int x,int y) {
     Position p; p.x = x; p.y = y;return p;
-}
-List NewList(TYPE type) {
-    List * list = (List *)malloc(sizeof(List));
-    (*list).Length = 0;
-    (*list).Type = type;
-    return *list;
-}
-void Add(List * _ref_list,void * item) {
-    switch ((*_ref_list).Type) {
-        case INT:
-            if ((*_ref_list).Length == 0) (*_ref_list).ArrayPointer = (int *)malloc(sizeof(int));
-            else (*_ref_list).ArrayPointer = realloc((*_ref_list).ArrayPointer, sizeof(int)*((*_ref_list).Length + 1));
-            *(((int *)(*_ref_list).ArrayPointer)+ (*_ref_list).Length) = *(int*)item;
-            break;
-        case POSITION:
-            if ((*_ref_list).Length == 0) (*_ref_list).ArrayPointer = (Position *)malloc(sizeof(Position));
-            else (*_ref_list).ArrayPointer = realloc((*_ref_list).ArrayPointer, sizeof(Position)*((*_ref_list).Length + 1));
-            *(((Position *)(*_ref_list).ArrayPointer) + (*_ref_list).Length) = *(Position*)item;
-            break;
-        case COLOR:
-            if ((*_ref_list).Length == 0) (*_ref_list).ArrayPointer = (Color *)malloc(sizeof(Color));
-            else (*_ref_list).ArrayPointer = realloc((*_ref_list).ArrayPointer, sizeof(Color)*((*_ref_list).Length+1));
-            *(((Color *)(*_ref_list).ArrayPointer) + (*_ref_list).Length) = *(Color*)item;
-            break;
-        case LIST:
-            if ((*_ref_list).Length == 0) (*_ref_list).ArrayPointer = (List *)malloc(sizeof(List));
-            else (*_ref_list).ArrayPointer = realloc((*_ref_list).ArrayPointer, sizeof(List)*((*_ref_list).Length + 1));
-            *(((List *)(*_ref_list).ArrayPointer) + (*_ref_list).Length) = *(List*)item;
-            break;
-    }
-    (*_ref_list).Length++;
 }
 ALLEGRO_COLOR getcolor(Color color) {
     switch (color) {
@@ -129,16 +102,16 @@ ALLEGRO_COLOR getcolor(Color color) {
     }
 }
 List GetRow(int rowno) {
-    List colorlist = NewList(COLOR);
-    for (int i = 0; i < EDGE_SIZE; i++) {
-        Add(&colorlist, &Table[rowno][i]);
+    List colorlist = NewList;
+    for (int i = 0; i < COLOR_COUNT; i++) {
+		ADD(Color, colorlist, Table[rowno][i]);
     }
     return colorlist;
 }
 List GetColumn(int colno) {
-    List colorlist = NewList(COLOR);
-    for (int i = 0; i < EDGE_SIZE; i++) {
-        Add(&colorlist, &Table[i][colno]);
+    List colorlist = NewList;
+    for (int i = 0; i < COLOR_COUNT; i++) {
+		ADD(Color, colorlist, Table[i][colno]);
     }
     return colorlist;
 }
@@ -154,29 +127,27 @@ void Start() {
     int width = monitor.x2 - monitor.x1 + 1;
     int height = monitor.y2 - monitor.y1 + 1;
     GameTableLength = (width < height) ? width : height;
-    Unit = GameTableLength/(float)EDGE_SIZE;
+    Unit = GameTableLength/(float)COLOR_COUNT;
     Margin = 0.01;
     GameTableStart.x = (width-GameTableLength)/2;
-    GameTableStart.y = (height - GameTableLength) / 2;
-    TableBackgroundColor = al_map_rgb(111, 0, 0);
+	GameTableStart.y = (height - GameTableLength) / 2 ;
+    TableBackgroundColor = al_map_rgb(0, 0, 111);
     display = al_create_display(width, height);
     al_clear_to_color(al_map_rgb(0, 0, 0));
-    al_set_window_title(display, "Jingo Game");
     al_init_ttf_addon();
     al_init_font_addon();
     al_install_keyboard();
     al_install_mouse();
-    
-    /*
-     PATH DE SORUN VAR.
-     ALLEGRO_PATH * path = al_get_standard_path("C:\Users\cemsi\Documents\Jingo\Jingo\Pacifico.ttf");
-     font = al_load_font(path, 20, 0);
-     */
+	al_set_window_title(display, "Jingo Game");
+	ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+	al_set_path_filename(path, "Pacifico.ttf");
+	font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
+	int asd = 0;
 }
 void CreateNodes() {
-    for (int x = 0, y = 0; x<EDGE_SIZE, y<EDGE_SIZE; x++) {
-        Table[y][x] = rand() % EDGE_SIZE;
-        if (x == EDGE_SIZE-1) {x = -1; y++;}
+    for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
+        Table[y][x] = rand() % COLOR_COUNT;
+        if (x == COLOR_COUNT-1) {x = -1; y++;}
     }
 }
 void GetNodeLocation(Position pos,Location * p1,Location * p2){
@@ -186,18 +157,17 @@ void GetNodeLocation(Position pos,Location * p1,Location * p2){
     p2->y = (pos.y+1)*Unit - Unit*Margin + GameTableStart.y;
 }
 void DrawNode(Position pos,Color color) {
-    if(color == Empty) return;
     Location p1;
     Location p2;
     GetNodeLocation(pos, &p1, &p2);
     al_draw_filled_rectangle(p1.x, p1.y, p2.x, p2.y, getcolor(color));
 }
 void DrawNodes() {
-    for (int x = 0, y = 0; x<EDGE_SIZE, y<EDGE_SIZE; x++) {
+    for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
         Position pos;
         pos.x = x; pos.y = y;
         DrawNode(pos, Table[y][x]);
-        if (x == EDGE_SIZE - 1) { x = -1; y++; }
+        if (x == COLOR_COUNT - 1) { x = -1; y++; }
     }
 }
 void DrawTableBackground() {
@@ -219,44 +189,32 @@ Color GetPositionColor(Position pos) {
     return Table[pos.y][pos.x];
 }
 List GetNodesByColor(Color color) {
-    List list = NewList(POSITION);
-    for (int x = 0, y = 0; x<EDGE_SIZE, y<EDGE_SIZE; x++) {
+    List list = NewList;
+    for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
         if (Table[y][x] == color) {
             Position pos;
             pos.x = x; pos.y = y;
-            Add(&list, &pos);
+			ADD(Position, list, pos);
         }
-        if (x == EDGE_SIZE - 1) { x = -1; y++; }
+        if (x == COLOR_COUNT - 1) { x = -1; y++; }
     }
     return list;
 }
 List CategoryNodesByColor() {
-    List ListOfListOfPositions = NewList(LIST);
-    for (int i = 0; i < EDGE_SIZE; i++) {
-        List newlist = NewList(POSITION);
-        Add(&ListOfListOfPositions, &newlist);
+    List ListOfListOfPositions = NewList;
+    for (int i = 0; i < COLOR_COUNT; i++) {
+        List newlist = NewList;
+        ADD(List ,ListOfListOfPositions, newlist);
     }
-    for (int x = 0, y = 0; x < EDGE_SIZE, y < EDGE_SIZE; x++) {
+    for (int x = 0, y = 0; x < COLOR_COUNT, y < COLOR_COUNT; x++) {
         Position pos;
         pos.x = x; pos.y = y;
-        Add((List*)ListOfListOfPositions.ArrayPointer + Table[y][x], &pos);
-        if (x == EDGE_SIZE - 1) { x = -1; y++; }
+		int tt = Table[y][x];
+		ADD(Position, (GET(List, ListOfListOfPositions, Table[y][x])), pos);
+        if (x == COLOR_COUNT - 1) { x = -1; y++; }
     }
+	List reds = GET(List, ListOfListOfPositions, 0);
     return ListOfListOfPositions;
-}
-void * Get(List list,unsigned int i) {
-    if (list.Length < i + 1) return NULL;
-    switch (list.Type) {
-        case INT:
-            return (void *)((int *) list.ArrayPointer + i);
-        case POSITION:
-            return (void *)((Position *)list.ArrayPointer + i);
-        case COLOR:
-            return (void *)((Color *)list.ArrayPointer + i);
-        case LIST:
-            return (void *)((List *)list.ArrayPointer + i);
-    }
-    return NULL;
 }
 int isPositionExists(Position pos, List positionList) {
     for (int i = 0; i < positionList.Length; i++) {
@@ -264,44 +222,43 @@ int isPositionExists(Position pos, List positionList) {
     }
     return 0;
 }
-
 List SearchForExplode() {
     List category = CategoryNodesByColor();
-    List explodes = NewList(LIST);
+    List explodes = NewList;
     for (int i = 0; i < category.Length; i++) {
         List ColorPositionList = *((List*)category.ArrayPointer + i);
         if (ColorPositionList.Length == 0) continue;
-        List ExplodeListOfPositionList = NewList(LIST);
+        List ExplodeListOfPositionList = NewList;
         
         int isChanged = 1;
         int current = 0;
         while (isChanged) {
-            List ExplodePositionList = NewList(POSITION);
+            List ExplodePositionList = NewList;
             isChanged = 0;
             for (int j= current; j < ColorPositionList.Length; j++) {
                 Position pos = *((Position *)ColorPositionList.ArrayPointer + j);
                 int used = 0;
                 for (int l = 0; l < ExplodeListOfPositionList.Length; l++) {
-                    List posList = *(List*)Get(ExplodeListOfPositionList, l);
+                    List posList = GET(List,ExplodeListOfPositionList, l);
                     if (isPositionExists(pos, posList)) {
                         used = 1; break;
                     }
                 }
                 if (isPositionExists(pos, ExplodePositionList)) used = 1;
                 if (used) continue;
-                if (ExplodePositionList.Length == 0) { Add(&ExplodePositionList, &pos); continue; }
+                if (ExplodePositionList.Length == 0) { ADD(Position, ExplodePositionList, pos); continue; }
                 for (int g = 0; g < ExplodePositionList.Length; g++) {
                     Position pos2 = *((Position *)ExplodePositionList.ArrayPointer + g);
                     int diffX = abs(pos.x - pos2.x);
                     int diffY = abs(pos.y - pos2.y);
                     if (diffX + diffY == 1) {
-                        Add(&ExplodePositionList, &pos);
+                        ADD(Position,ExplodePositionList, pos);
                         j = -1;
                     }
                 }
             }
             if (ExplodePositionList.Length > 2) {
-                Add(&ExplodeListOfPositionList, &ExplodePositionList);
+                ADD(List, ExplodeListOfPositionList, ExplodePositionList);
                 isChanged = 1;
             }
             else if(current<ColorPositionList.Length){
@@ -309,7 +266,7 @@ List SearchForExplode() {
                 isChanged = 1;
             }
         }
-        Add(&explodes, &ExplodeListOfPositionList);	
+        ADD(List, explodes, ExplodeListOfPositionList);	
     }
     return explodes;
 }
@@ -317,11 +274,12 @@ void StartDrawing(){
     DrawTable();
 }
 void EndDrawing(){
+	al_draw_text(font, getcolor(Red), 50, 100, 0, "Test");
     al_flip_display();
 }
 void FillEmpty(List positionList){
     for(int i=0;i<positionList.Length;i++){
-        Position pos = *(Position *)Get(positionList,i);
+        Position pos = GET(Position,positionList,i);
         Table[pos.y][pos.x] = Empty;
     }
 }
@@ -329,18 +287,18 @@ void FallColumn(int colNo){
     // Optimize Edilecek
     List colList = GetColumn(colNo);
     bool isFalling = true;
-    List fallsList = NewList(POSITION);
+    List fallsList = NewList;
     while(isFalling){
         isFalling = false;
         for(int i=1;i<colList.Length;i++){
-            Color color = *(Color *)Get(colList, i);
+            Color color = GET(Color,colList, i);
             if(color == Empty && Table[i-1][colNo] != Empty){
                 for(int j=i;j>=0;j--){
                     Table[j][colNo] = Table[j-1][colNo];
                 }
                 colList = GetColumn(colNo);
                 Position pos; pos.x = colNo; pos.y = fallsList.Length;
-                Add(&fallsList, &pos);
+                ADD(Position, fallsList, pos);
                 isFalling = true;
                 break;
             }
@@ -349,14 +307,14 @@ void FallColumn(int colNo){
     FillEmpty(fallsList);
 }
 void Fall(){
-    for(int i=0;i<EDGE_SIZE;i++){
+    for(int i=0;i<COLOR_COUNT;i++){
         FallColumn(i);
     }
 }
 void FillEmptyNodes(){
-    for (int x = 0, y = 0; x<EDGE_SIZE, y<EDGE_SIZE; x++) {
-        if(Table[y][x] == Empty) Table[y][x] = rand() % EDGE_SIZE;
-        if (x == EDGE_SIZE-1) {x = -1; y++;}
+    for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
+        if(Table[y][x] == Empty) Table[y][x] = rand() % COLOR_COUNT;
+        if (x == COLOR_COUNT-1) {x = -1; y++;}
     }
 }
 int Explode(){
@@ -367,9 +325,9 @@ int Explode(){
         isExploding = false;
         exp = SearchForExplode();
         for (int i = 0; i < exp.Length; i++) {
-            List colorposlist = *(List *) Get(exp, i);
+            List colorposlist = GET(List,exp, i);
             for(int j=0;j<colorposlist.Length;j++){
-                List poslist = *(List *)Get(colorposlist, j);
+                List poslist = GET(List, colorposlist, j);
                 if(poslist.Length > 0){
                     isExploding = true;
                     exploded += poslist.Length;
@@ -393,9 +351,9 @@ void NewGame(){
     StartDrawing();
     EndDrawing();
 }
-void CloneTable(Color (*from)[EDGE_SIZE],Color (*to)[EDGE_SIZE]){
-    for(int i=0;i<EDGE_SIZE;i++){
-        for(int j=0;j<EDGE_SIZE;j++){
+void CloneTable(Color (*from)[COLOR_COUNT],Color (*to)[COLOR_COUNT]){
+    for(int i=0;i<COLOR_COUNT;i++){
+        for(int j=0;j<COLOR_COUNT;j++){
             to[i][j] = from[i][j];
         }
     }
@@ -414,13 +372,13 @@ void MoveRow(int rowno,float shift){
     Location end;
     start.x = GameTableStart.x;
     start.y = rowno*Unit + GameTableStart.y;
-    end.x = Unit*EDGE_SIZE + GameTableStart.x;
+    end.x = Unit*COLOR_COUNT + GameTableStart.x;
     end.y = (rowno+1)*Unit + GameTableStart.y;
     al_draw_filled_rectangle(start.x, start.y, end.x, end.y, TableBackgroundColor);
     start.x += Unit*Margin;
     end.x -= Unit*Margin;
     for(int i=0;i<colorList.Length;i++){
-        Color color = *(Color *)Get(colorList, i);
+        Color color = GET(Color,colorList, i);
         Location p1;
         Location p2;
         Position pos;
@@ -455,7 +413,7 @@ void MoveColumn(int colno,float shift){
     start.y += Unit*Margin;
     end.y -= Unit*Margin;
     for(int i=0;i<colorList.Length;i++){
-        Color color = *(Color *)Get(colorList, i);
+        Color color = GET(Color,colorList, i);
         Location p1;
         Location p2;
         Position pos;
@@ -478,7 +436,6 @@ void MoveColumn(int colno,float shift){
         }
     }
 }
-
 Position GetPositionOnTable(Location loc){
     Position pos;
     pos.x = floor((loc.x - GameTableStart.x)/Unit);
@@ -515,36 +472,36 @@ void MouseMoveEventHandler(){
 }
 void ShiftRow(int rowNo){
     Color temp = Table[rowNo][0];
-    for(int i=0;i<EDGE_SIZE-1;i++){
+    for(int i=0;i<COLOR_COUNT-1;i++){
         Table[rowNo][i] = Table[rowNo][i+1];
     }
-    Table[rowNo][EDGE_SIZE-1] = temp;
+    Table[rowNo][COLOR_COUNT-1] = temp;
 }
 void ShiftColumn(int colNo){
     Color temp = Table[0][colNo];
-    for(int i=0;i<EDGE_SIZE-1;i++){
+    for(int i=0;i<COLOR_COUNT-1;i++){
         Table[i][colNo] = Table[i+1][colNo];
     }
-    Table[EDGE_SIZE-1][colNo] = temp;
+    Table[COLOR_COUNT-1][colNo] = temp;
 }
 void MouseUpEventHandler(){
     mouse.isActive = false;
     al_get_mouse_state(&mouse.state);
     Position MouseStartPos = GetPositionOnTable(mouse.start);
-    Color newtable[EDGE_SIZE][EDGE_SIZE];
+    Color newtable[COLOR_COUNT][COLOR_COUNT];
     CloneTable(Table,newtable);
     if(mouse.direction == Horizontal){
         int rowno = MouseStartPos.y;
         float shifted = ((float)mouse.state.x) - mouse.start.x;
         ModShift(&shifted);
         int shiftUnit = round(shifted/Unit);
-        for(int i=0;i<EDGE_SIZE-shiftUnit;i++) ShiftRow(rowno);
+        for(int i=0;i<COLOR_COUNT-shiftUnit;i++) ShiftRow(rowno);
     }else if(mouse.direction == Vertical){
         int colno = MouseStartPos.x;
         float shifted = ((float)mouse.state.y) - mouse.start.y;
         ModShift(&shifted);
         int shiftUnit = round(shifted/Unit);
-        for(int i=0;i<EDGE_SIZE-shiftUnit;i++) ShiftColumn(colno);
+        for(int i=0;i<COLOR_COUNT-shiftUnit;i++) ShiftColumn(colno);
     }
     int exploded = Explode();
     if(exploded == 0) CloneTable(newtable, Table);
@@ -561,7 +518,6 @@ void MouseDownEventHandler(){
 void TimerEventHandler(){
 
 }
-#pragma endregion
 
 int main() {
     Start();
