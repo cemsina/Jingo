@@ -49,8 +49,9 @@ typedef struct{
     ALLEGRO_MOUSE_STATE state;
 } Mouse;
 typedef struct {
-	Location start;
-	Location end;
+	Position start;
+	int endRow;
+	float CompletedUnits;
 	Color color;
 }FallingObject;
 /* GLOBALS*/
@@ -62,8 +63,13 @@ float Margin;
 Location GameTableStart;
 float GameTableLength;
 ALLEGRO_COLOR TableBackgroundColor;
+ALLEGRO_TIMER * timer;
+ALLEGRO_EVENT_QUEUE * queue;
 Mouse mouse;
 bool isGameActive;
+float FallingSpeed;
+bool isFalling;
+List Falling[COLOR_COUNT];
 /* FUNCTIONS */
 Position NewPosition(int x,int y) {
     Position p; p.x = x; p.y = y;return p;
@@ -132,6 +138,7 @@ void Start() {
     GameTableStart.x = (width-GameTableLength)/2;
 	GameTableStart.y = (height - GameTableLength) / 2 ;
     TableBackgroundColor = al_map_rgb(0, 0, 111);
+	FallingSpeed = 0.1;
     display = al_create_display(width, height);
     al_clear_to_color(al_map_rgb(0, 0, 0));
     al_init_ttf_addon();
@@ -140,8 +147,8 @@ void Start() {
     al_install_mouse();
 	al_set_window_title(display, "Jingo Game");
 	ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
-	al_set_path_filename(path, "Pacifico.ttf");
-	font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
+	//al_set_path_filename(path, "Pacifico.ttf");
+	//font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
 	int asd = 0;
 }
 void CreateNodes() {
@@ -155,6 +162,14 @@ void GetNodeLocation(Position pos,Location * p1,Location * p2){
     p1->y = pos.y*Unit + Unit*Margin +GameTableStart.y;
     p2->x = (pos.x+1)*Unit  - Unit*Margin + GameTableStart.x;
     p2->y = (pos.y+1)*Unit - Unit*Margin + GameTableStart.y;
+}
+void GetFallingObjectLocation(FallingObject obj, Location *p1, Location *p2) {
+	Location start_p1, start_p2;
+	GetNodeLocation(obj.start, &start_p1, &start_p2);
+	p1->y = start_p1.y + Unit * obj.CompletedUnits;
+	p1->x = start_p1.x;
+	p2->x = start_p2.x;
+	p2->y = start_p2.y + Unit * obj.CompletedUnits;
 }
 void DrawNode(Position pos,Color color) {
     Location p1;
@@ -213,7 +228,6 @@ List CategoryNodesByColor() {
 		ADD(Position, (GET(List, ListOfListOfPositions, Table[y][x])), pos);
         if (x == COLOR_COUNT - 1) { x = -1; y++; }
     }
-	List reds = GET(List, ListOfListOfPositions, 0);
     return ListOfListOfPositions;
 }
 int isPositionExists(Position pos, List positionList) {
@@ -274,43 +288,121 @@ void StartDrawing(){
     DrawTable();
 }
 void EndDrawing(){
-	al_draw_text(font, getcolor(Red), 50, 100, 0, "Test");
+	//al_draw_text(font, getcolor(Red), 50, 100, 0, "Test");
     al_flip_display();
 }
-void FillEmpty(List positionList){
+void SetEmpty(List positionList){
     for(int i=0;i<positionList.Length;i++){
         Position pos = GET(Position,positionList,i);
         Table[pos.y][pos.x] = Empty;
     }
 }
-void FallColumn(int colNo){
-    // Optimize Edilecek
+List FallColumn(int colNo){
     List colList = GetColumn(colNo);
-    bool isFalling = true;
-    List fallsList = NewList;
-    while(isFalling){
-        isFalling = false;
-        for(int i=1;i<colList.Length;i++){
-            Color color = GET(Color,colList, i);
-            if(color == Empty && Table[i-1][colNo] != Empty){
-                for(int j=i;j>=0;j--){
-                    Table[j][colNo] = Table[j-1][colNo];
-                }
-                colList = GetColumn(colNo);
-                Position pos; pos.x = colNo; pos.y = fallsList.Length;
-                ADD(Position, fallsList, pos);
-                isFalling = true;
-                break;
-            }
-        }
+    List fallList = NewList;
+    for(int i=0;i<colList.Length-1;i++){
+        Color color = GET(Color,colList, i);
+		if (color == Empty) continue;
+		int emptycount = 0;
+		for (int j = i+1; j < colList.Length; j++) {
+			Color belowColor = GET(Color, colList, j);
+			if (belowColor == Empty) emptycount++;
+		}
+		if (emptycount > 0) {
+			FallingObject obj;
+			obj.color = color;
+			obj.start.x = colNo;
+			obj.start.y = i;
+			obj.CompletedUnits = 0;
+			obj.endRow = i + emptycount;
+			ADD(FallingObject, fallList, obj);
+		}
     }
-    FillEmpty(fallsList);
+    return fallList;
+}
+void FallHandler() {
+	isFalling = true;
+	while (isFalling && isGameActive) {
+		ALLEGRO_EVENT e;
+		al_wait_for_event(queue, &e);
+		switch (e.type) {
+		case ALLEGRO_EVENT_TIMER:
+			isFalling = false;
+			StartDrawing();
+			for (int i = 0; i<COLOR_COUNT; i++) {
+				if (Falling[i].Length > 0) {
+					FallingObject last = GET(FallingObject, Falling[i], Falling[i].Length - 1);
+					Location top_p1, top_p2, bottom_p1, bottom_p2;
+					GetNodeLocation(NewPosition(i,0), &top_p1, &top_p2);
+					GetNodeLocation(NewPosition(i, COLOR_COUNT-1), &bottom_p1, &bottom_p2);
+					al_draw_filled_rectangle(top_p1.x, top_p1.y, bottom_p2.x, bottom_p2.y, getcolor(Empty));
+					for (int j = last.start.y+1; j < COLOR_COUNT; j++) {
+						Position pos = NewPosition(i, j);
+						Color color = GetPositionColor(pos);
+						DrawNode(pos, color);
+					}
+				}
+				for (int j = 0; j < Falling[i].Length; j++) {
+					FallingObject * obj = GET_PTR(FallingObject, Falling[i], j);
+					float diff = obj->endRow - obj->start.y;
+					if (diff > obj->CompletedUnits) {
+						isFalling = true;
+						obj->CompletedUnits += FallingSpeed;
+					}
+					Location p1, p2;
+					GetFallingObjectLocation(*obj, &p1, &p2);
+					al_draw_filled_rectangle(p1.x, p1.y, p2.x, p2.y, getcolor(obj->color));
+				}
+			}
+			EndDrawing();
+			break;
+		default:
+			break;
+		}
+	}
+	for (int i = 0; i<COLOR_COUNT; i++) {
+		if (Falling[i].Length > 0) {
+			FallingObject obj = GET(FallingObject, Falling[i], 0);
+			int diff = obj.endRow - obj.start.y;
+			for (int j = 0; j < diff; j++) {
+				Table[j][i] = Empty;
+			}
+		}
+		for (int j = 0; j < Falling[i].Length; j++) {
+			FallingObject obj = GET(FallingObject, Falling[i], j);
+			Table[obj.endRow][i] = obj.color;
+		}
+
+	}
 }
 void Fall(){
     for(int i=0;i<COLOR_COUNT;i++){
-        FallColumn(i);
+		Falling[i] = FallColumn(i);
     }
+	FallHandler();
+	StartDrawing();
+	EndDrawing();
+	for (int i = 0; i < COLOR_COUNT; i++) {
+		if (Falling[i].Length > 0) {
+			FallingObject obj = GET(FallingObject, Falling[i], 0);
+			List newNodeList = NewList;
+			int diff = obj.endRow - obj.start.y;
+			for (int j = 0; j < diff; j++) {
+				FallingObject newobj;
+				newobj.start.x = obj.start.x;
+				newobj.start.y = j - diff;
+				newobj.color = rand() % COLOR_COUNT;
+				newobj.CompletedUnits = 0;
+				newobj.endRow = j;
+				ADD(FallingObject, newNodeList, newobj);
+			}
+			Falling[i] = newNodeList;
+		}
+	}
+	FallHandler();
+	int asd = 0;
 }
+
 void FillEmptyNodes(){
     for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
         if(Table[y][x] == Empty) Table[y][x] = rand() % COLOR_COUNT;
@@ -331,7 +423,7 @@ int Explode(){
                 if(poslist.Length > 0){
                     isExploding = true;
                     exploded += poslist.Length;
-                    FillEmpty(poslist);
+                    SetEmpty(poslist);
                 }
             }
         }
@@ -346,7 +438,7 @@ void NewGame(){
     mouse.start.x = -1;
     mouse.start.y = -1;
     CreateNodes();
-    Explode();
+    //Explode();
     isGameActive = true;
     StartDrawing();
     EndDrawing();
@@ -516,18 +608,20 @@ void MouseDownEventHandler(){
     mouse.direction = None;
 }
 void TimerEventHandler(){
+	if (isFalling) {
 
+	}
 }
 
 int main() {
     Start();
     NewGame();
-    ALLEGRO_TIMER * timer;
-    timer = al_create_timer(0.1);
-    ALLEGRO_EVENT_QUEUE * queue = al_create_event_queue();
+    timer = al_create_timer(0.05);
+    queue = al_create_event_queue();
     al_register_event_source(queue, al_get_timer_event_source(timer));
     al_register_event_source(queue, al_get_mouse_event_source());
     al_start_timer(timer);
+	
     while(isGameActive){
         ALLEGRO_EVENT e;
         al_wait_for_event(queue, &e);
@@ -537,9 +631,11 @@ int main() {
                 if(mouse.isActive) MouseMoveEventHandler();
                 break;
             case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
+				if (isFalling) break;
                 MouseDownEventHandler();
                 break;
             case ALLEGRO_EVENT_MOUSE_BUTTON_UP:
+				if (isFalling) break;
                 MouseUpEventHandler();
                 break;
             default:
