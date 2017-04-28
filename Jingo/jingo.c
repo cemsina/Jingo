@@ -438,7 +438,7 @@ void NewGame(){
     mouse.start.x = -1;
     mouse.start.y = -1;
     CreateNodes();
-    //Explode();
+    Explode();
     isGameActive = true;
     StartDrawing();
     EndDrawing();
