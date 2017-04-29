@@ -360,20 +360,23 @@ void FallHandler() {
 			break;
 		}
 	}
+	int asd = 0;
 	for (int i = 0; i<COLOR_COUNT; i++) {
 		if (Falling[i].Length > 0) {
 			FallingObject obj = GET(FallingObject, Falling[i], 0);
+			// sorun burada
 			int diff = obj.endRow - obj.start.y;
-			for (int j = 0; j < diff; j++) {
-				Table[j][i] = Empty;
-			}
+			if(!obj.endRow == 0)
+				for (int j = 0; j < diff; j++) {
+					Table[j][i] = Empty;
+				}
 		}
 		for (int j = 0; j < Falling[i].Length; j++) {
 			FallingObject obj = GET(FallingObject, Falling[i], j);
 			Table[obj.endRow][i] = obj.color;
 		}
-
 	}
+	isFalling = false;
 }
 void Fall(){
     for(int i=0;i<COLOR_COUNT;i++){
@@ -383,24 +386,27 @@ void Fall(){
 	StartDrawing();
 	EndDrawing();
 	for (int i = 0; i < COLOR_COUNT; i++) {
-		if (Falling[i].Length > 0) {
-			FallingObject obj = GET(FallingObject, Falling[i], 0);
-			List newNodeList = NewList;
-			int diff = obj.endRow - obj.start.y;
-			for (int j = 0; j < diff; j++) {
-				FallingObject newobj;
-				newobj.start.x = obj.start.x;
-				newobj.start.y = j - diff;
-				newobj.color = rand() % COLOR_COUNT;
-				newobj.CompletedUnits = 0;
-				newobj.endRow = j;
-				ADD(FallingObject, newNodeList, newobj);
-			}
-			Falling[i] = newNodeList;
+		List col = GetColumn(i);
+		int emptycount = 0;
+		for (int j = 0; j < col.Length; j++) {
+			Color color = GET(Color, col, j);
+			if (color == Empty) emptycount++;
 		}
+		List newNodeList = NewList;
+		for (int j = 0; j < emptycount; j++) {
+			FallingObject newobj;
+			newobj.start.x = i;
+			newobj.start.y = j - emptycount -1;
+			newobj.color = rand() % COLOR_COUNT;
+			newobj.CompletedUnits = 0;
+			newobj.endRow = j;
+			ADD(FallingObject, newNodeList, newobj);
+		}
+		Falling[i] = newNodeList;
 	}
 	FallHandler();
-	int asd = 0;
+	StartDrawing();
+	EndDrawing();
 }
 
 void FillEmptyNodes(){
@@ -608,9 +614,7 @@ void MouseDownEventHandler(){
     mouse.direction = None;
 }
 void TimerEventHandler(){
-	if (isFalling) {
 
-	}
 }
 
 int main() {
