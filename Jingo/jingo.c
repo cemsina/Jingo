@@ -137,8 +137,8 @@ void Start() {
     Margin = 0.01;
     GameTableStart.x = (width-GameTableLength)/2;
 	GameTableStart.y = (height - GameTableLength) / 2 ;
-    TableBackgroundColor = al_map_rgb(0, 0, 111);
-	FallingSpeed = 0.1;
+    TableBackgroundColor = al_map_rgb(0, 0, 0);
+	FallingSpeed = 0.4;
     display = al_create_display(width, height);
     al_clear_to_color(al_map_rgb(0, 0, 0));
     al_init_ttf_addon();
@@ -146,10 +146,9 @@ void Start() {
     al_install_keyboard();
     al_install_mouse();
 	al_set_window_title(display, "Jingo Game");
-	ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+	//ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
 	//al_set_path_filename(path, "Pacifico.ttf");
 	//font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
-	int asd = 0;
 }
 void CreateNodes() {
     for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
@@ -240,7 +239,7 @@ List SearchForExplode() {
     List category = CategoryNodesByColor();
     List explodes = NewList;
     for (int i = 0; i < category.Length; i++) {
-        List ColorPositionList = *((List*)category.ArrayPointer + i);
+        List ColorPositionList = GET(List, category,i);
         if (ColorPositionList.Length == 0) continue;
         List ExplodeListOfPositionList = NewList;
         
@@ -250,7 +249,7 @@ List SearchForExplode() {
             List ExplodePositionList = NewList;
             isChanged = 0;
             for (int j= current; j < ColorPositionList.Length; j++) {
-                Position pos = *((Position *)ColorPositionList.ArrayPointer + j);
+				Position pos = GET(Position, ColorPositionList, j);
                 int used = 0;
                 for (int l = 0; l < ExplodeListOfPositionList.Length; l++) {
                     List posList = GET(List,ExplodeListOfPositionList, l);
@@ -262,7 +261,7 @@ List SearchForExplode() {
                 if (used) continue;
                 if (ExplodePositionList.Length == 0) { ADD(Position, ExplodePositionList, pos); continue; }
                 for (int g = 0; g < ExplodePositionList.Length; g++) {
-                    Position pos2 = *((Position *)ExplodePositionList.ArrayPointer + g);
+					Position pos2 = GET(Position, ExplodePositionList, g);
                     int diffX = abs(pos.x - pos2.x);
                     int diffY = abs(pos.y - pos2.y);
                     if (diffX + diffY == 1) {
@@ -360,7 +359,6 @@ void FallHandler() {
 			break;
 		}
 	}
-	int asd = 0;
 	for (int i = 0; i<COLOR_COUNT; i++) {
 		if (Falling[i].Length > 0) {
 			FallingObject obj = GET(FallingObject, Falling[i], 0);
@@ -408,7 +406,6 @@ void Fall(){
 	StartDrawing();
 	EndDrawing();
 }
-
 void FillEmptyNodes(){
     for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
         if(Table[y][x] == Empty) Table[y][x] = rand() % COLOR_COUNT;
@@ -433,6 +430,8 @@ int Explode(){
                 }
             }
         }
+		StartDrawing();
+		EndDrawing();
         Fall();
         FillEmptyNodes();
     } while (isExploding);
@@ -616,7 +615,6 @@ void MouseDownEventHandler(){
 void TimerEventHandler(){
 
 }
-
 int main() {
     Start();
     NewGame();
