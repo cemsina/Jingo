@@ -16,13 +16,13 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #define COLOR_COUNT 8
-#define GET_PTR(type,list,i)	((type *) list.ArrayPointer + i)
-#define GET(type,list,i)	*GET_PTR(type,list,i)
-#define ADD(type,list,item) if (list.Length == 0) list.ArrayPointer = (type *) malloc(sizeof(type));\
-							else list.ArrayPointer = realloc(list.ArrayPointer, sizeof(type)*(list.Length + 1));\
-							*(GET_PTR(type,list,list.Length)) = item; list.Length++
-#define NewList	{NULL,0}
+#define ADD(type,list,item) ListNode * n = NewListNode();if(list.Length == 0){list.start = n;list.end = n;}else{list.end->next = n;list.end = n;}   (type *) n->pointer = (type *)malloc(sizeof(type));\
+								*((type *)n->pointer) = item;list.Length++;
+#define GET_PTR(type,list,i)	(type *) Get(list,i)
+#define GET(type,list,i) *GET_PTR(type,list,i)
+#define NewList	{NULL,NULL,0}
 /* TYPE DEFINITIONS */
 typedef enum {
     Red, Green, Blue, Yellow, Purple, Grey, Pink, Orange,Empty
@@ -31,8 +31,13 @@ typedef struct {
     int x;
     int y;
 } Position;
+typedef struct ListNode{
+	void * pointer;
+	struct ListNode * next;
+}ListNode;
 typedef struct {
-    void * ArrayPointer;
+    ListNode * start;
+	ListNode * end;
     unsigned int Length;
 }  List ;
 typedef struct {
@@ -71,6 +76,23 @@ float FallingSpeed;
 bool isFalling;
 List Falling[COLOR_COUNT];
 /* FUNCTIONS */
+ListNode * NewListNode() {
+	ListNode * n = (ListNode *)malloc(sizeof(ListNode));
+	n->next = NULL;
+	return n;
+}
+ListNode * GetListNode(List list,int no) {
+	if (no > list.Length) return NULL;
+	ListNode * n = list.start;
+	for (int i = 1; i <= no; i++) {
+		n = n->next;
+	}
+	return n;
+}
+void * Get(List list,int no) {
+	ListNode * n = GetListNode(list, no);
+	return n->pointer;
+}
 Position NewPosition(int x,int y) {
     Position p; p.x = x; p.y = y;return p;
 }
@@ -146,7 +168,7 @@ void Start() {
     al_install_keyboard();
     al_install_mouse();
 	al_set_window_title(display, "Jingo Game");
-	//ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+	ALLEGRO_PATH * path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
 	//al_set_path_filename(path, "Pacifico.ttf");
 	//font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
 }
@@ -229,11 +251,12 @@ List CategoryNodesByColor() {
     }
     return ListOfListOfPositions;
 }
-int isPositionExists(Position pos, List positionList) {
+bool isPositionExists(Position pos, List positionList) {
     for (int i = 0; i < positionList.Length; i++) {
-        if (pos.x == (*((Position *)positionList.ArrayPointer + i)).x && pos.y == (*((Position *)positionList.ArrayPointer + i)).y) return 1;
+		Position p = GET(Position, positionList, i);
+        if (pos.x == p.x && pos.y == p.y) return true;
     }
-    return 0;
+    return false;
 }
 List SearchForExplode() {
     List category = CategoryNodesByColor();
@@ -416,6 +439,7 @@ int Explode(){
     int exploded = 0;
     List exp;
     bool isExploding = true;
+	int combo = 0;
     do {
         isExploding = false;
         exp = SearchForExplode();
@@ -427,6 +451,7 @@ int Explode(){
                     isExploding = true;
                     exploded += poslist.Length;
                     SetEmpty(poslist);
+					combo++;
                 }
             }
         }
