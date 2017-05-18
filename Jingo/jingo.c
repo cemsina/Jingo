@@ -35,7 +35,9 @@ typedef enum {
 	False,True
 } Bool;
 typedef enum {
-	Red, Green, Blue, Yellow, Purple, Grey, Pink, Orange, Empty
+	Empty=-1,
+	Red, Green, Blue, Yellow, Purple, Grey, Pink, Orange, 
+	Red_Bomb, Green_Bomb, Blue_Bomb, Yellow_Bomb, Purple_Bomb, Grey_Bomb, Pink_Bomb, Orange_Bomb
 } Color;
 typedef struct {
 	int x;
@@ -68,8 +70,12 @@ typedef struct {
 	int endRow;
 	float CompletedUnits;
 	Color color;
-	Bool isBomb;
 }FallingObject;
+typedef struct {
+	unsigned long timestamp;
+	int count;
+	Location start;
+}ComboObject;
 /* GLOBALS*/
 Color Table[COLOR_COUNT][COLOR_COUNT];
 ALLEGRO_DISPLAY * display;
@@ -93,10 +99,16 @@ int Combo;
 int BombPercent;
 int Score;
 int Moves;
-List BombList;
 int width;
 int height;
 unsigned long StartedTime;
+ALLEGRO_BITMAP * ScoreTableImage;
+ALLEGRO_BITMAP * TimerTableImage;
+int GameTime;
+List ComboList = NewList;
+int ComboDuration;//seconds
+int combobox_width;
+int combobox_height;
 /* FUNCTIONS */
 ListNode * NewListNode() {
 	ListNode * n = (ListNode *)malloc(sizeof(ListNode));
@@ -119,6 +131,7 @@ Position NewPosition(int x, int y) {
 	Position p; p.x = x; p.y = y; return p;
 }
 ALLEGRO_COLOR getcolor(Color color) {
+	color %= COLOR_COUNT;
 	switch (color) {
 	case Red:
 		return al_map_rgb(255, 0, 0);
@@ -165,34 +178,27 @@ List GetColumn(int colno) {
 	}
 	return colorlist;
 }
-void AddBomb(int x,int y) {
-	Position pos;
-	pos.x = x;
-	pos.y = y;
-	ADD(Position, BombList, pos);
+
+void DrawGameTableEdges() {
+	// top
+	al_draw_filled_rectangle(GameTableStart.x, 0, GameTableStart.x + GameTableLength, GameTableStart.y, TableBackgroundColor);
+	// right
+	al_draw_filled_rectangle(GameTableStart.x + GameTableLength + Unit, GameTableStart.y, GameTableStart.x + GameTableLength, GameTableStart.y + GameTableLength, TableBackgroundColor);
+	// bottom
+	al_draw_filled_rectangle(GameTableStart.x, GameTableStart.y + GameTableLength + Unit, GameTableStart.x + GameTableLength, GameTableStart.y + GameTableLength, TableBackgroundColor);
+	// left
+	al_draw_filled_rectangle(GameTableStart.x - Unit, GameTableStart.y, GameTableStart.x, GameTableStart.y + GameTableLength, TableBackgroundColor);
+
 }
-void ExplodeBomb(int no) {
-	ListNode * CurrentNode = GetListNode(BombList, no);
-	Position pos = GET(Position, BombList, no);
-	ListNode * BeforeNode = NULL;
-	ListNode * AfterNode = CurrentNode->next;
-	if (no > 0) BeforeNode = GetListNode(BombList, no - 1);
-	if (BeforeNode != NULL && AfterNode != NULL) {
-		BeforeNode->next = AfterNode;
-	}else if (BeforeNode == NULL && AfterNode != NULL) {
-		BombList.start = AfterNode;
-	}else if (BeforeNode != NULL && AfterNode == NULL) {
-		BombList.end = BeforeNode;
-	}else if (BeforeNode == NULL && AfterNode == NULL) {
-		BombList.end = BombList.start = NULL;
-	}
-	BombList.Length--;
+void ExplodeBomb(Position pos) {
 	int startX = (pos.x - 1 >= 0) ? pos.x - 1 : pos.x;
 	int startY = (pos.y - 1 >= 0) ? pos.y - 1 : pos.y;
 	int endX = (pos.x + 1 < COLOR_COUNT) ? pos.x + 1 : pos.x;
 	int endY = (pos.y - 1 < COLOR_COUNT) ? pos.y + 1 : pos.y;
-	for (int x = startX, y = startY; x < endX, y < endY; x++, y++) {
+	for (int x = startX, y = startY; x<=endX, y<=endY; x++) {
 		Table[y][x] = Empty;
+		if (x >= endX) { x = startX - 1; y++; }
+		Score += 75;
 	}
 }
 void Exit() {
@@ -213,13 +219,14 @@ void Start() {
 	GameTableStart.y = (height - GameTableLength) / 2;
 	TableBackgroundColor = al_map_rgb(0, 0, 0);
 	FallingSpeed = 0.4;
-	BombList.start = NULL;
-	BombList.end = NULL;
-	BombList.Length = 0;
 	Combo = 0;
 	BombPercent = 99;
 	Score = 0;
 	Moves = 0;
+	GameTime = 100; //seconds
+	ComboDuration = 3;//seconds
+	combobox_width = 180;
+	combobox_height = 50;
 	display = al_create_display(width, height);
 	al_clear_to_color(al_map_rgb(0, 0, 0));
 	al_init_ttf_addon();
@@ -236,7 +243,13 @@ void Start() {
 	BombImage = al_load_bitmap(al_path_cstr(path, '/'));
 	path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
 	al_set_path_filename(path, "Pacifico.ttf");
-	font = al_load_ttf_font(al_path_cstr(path, '/'), 20, 0);
+	font = al_load_ttf_font(al_path_cstr(path, '/'), 30, 0);
+	path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+	al_set_path_filename(path, "bar1.png");
+	ScoreTableImage = al_load_bitmap(al_path_cstr(path, '/'));
+	path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+	al_set_path_filename(path, "bar1.png");
+	TimerTableImage = al_load_bitmap(al_path_cstr(path, '/'));
 }
 void CreateNodes() {
 	for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
@@ -258,10 +271,10 @@ void GetFallingObjectLocation(FallingObject obj, Location *p1, Location *p2) {
 	p2->x = start_p2.x;
 	p2->y = start_p2.y + Unit * obj.CompletedUnits;
 }
-void DrawNodeByLocation(Location p1, Location p2, Color color, Bool isBomb) {
+void DrawNodeByLocation(Location p1, Location p2, Color color) {
 	al_draw_filled_rectangle(p1.x, p1.y, p2.x, p2.y, getcolor(color));
-	if (color != Empty) { 
-		if (isBomb) al_draw_scaled_bitmap(BombImage, 0, 0, 200, 200, p1.x, p1.y, Unit - Unit*Margin, Unit - Unit*Margin, 0);
+	if (color != Empty) {
+		if (color >= COLOR_COUNT) al_draw_scaled_bitmap(BombImage, 0, 0, 200, 200, p1.x, p1.y, Unit - Unit*Margin, Unit - Unit*Margin, 0);
 		else al_draw_scaled_bitmap(NodeImage, 0, 0, 256, 256, p1.x, p1.y, Unit - Unit*Margin, Unit - Unit*Margin, 0); 
 	}
 }
@@ -269,7 +282,7 @@ void DrawNode(Position pos, Color color) {
 	Location p1;
 	Location p2;
 	GetNodeLocation(pos, &p1, &p2);
-	DrawNodeByLocation(p1, p2, color, isPositionExists(pos, BombList));
+	DrawNodeByLocation(p1, p2, color);
 }
 void DrawNodes() {
 	for (int x = 0, y = 0; x<COLOR_COUNT, y<COLOR_COUNT; x++) {
@@ -310,18 +323,20 @@ List GetNodesByColor(Color color) {
 	return list;
 }
 List CategoryNodesByColor() {
-	List ListOfListOfPositions = NewList;
+	List ListOfListOfPosition = NewList;
 	for (int i = 0; i < COLOR_COUNT; i++) {
 		List newlist = NewList;
-		ADD(List, ListOfListOfPositions, newlist);
+		ADD(List, ListOfListOfPosition, newlist);
 	}
 	for (int x = 0, y = 0; x < COLOR_COUNT, y < COLOR_COUNT; x++) {
 		Position pos;
 		pos.x = x; pos.y = y;
-		ADD(Position, (GET(List, ListOfListOfPositions, Table[y][x])), pos);
+		int category = Table[y][x] % COLOR_COUNT;
+		List * poslist = GET_PTR(List, ListOfListOfPosition, category);
+		ADD(Position, (*poslist), pos);
 		if (x == COLOR_COUNT - 1) { x = -1; y++; }
 	}
-	return ListOfListOfPositions;
+	return ListOfListOfPosition;
 }
 int getPositionOnList(Position pos, List positionList) {
 	if (positionList.Length == 0) return -1;
@@ -389,8 +404,29 @@ List SearchForExplode() {
 void StartDrawing() {
 	DrawTable();
 }
+void DrawCombo(ComboObject combo) {
+	unsigned long now = time(NULL);
+	unsigned long diff = time(NULL) - combo.timestamp;
+	if (time(NULL) - combo.timestamp > ComboDuration) return;
+	int box_width = 200;
+	int box_height = 50;
+	ALLEGRO_COLOR c = al_map_rgb(0, 255, 0);
+	if (combo.count > 2) c = al_map_rgb(0, 0, 255);
+	if (combo.count > 3) c = al_map_rgb(255, 0, 0);
+	al_draw_rectangle(combo.start.x, combo.start.y, combo.start.x + combobox_width, combo.start.y + combobox_height, al_map_rgb(0, 0, 0), 10);
+	al_draw_filled_rectangle(combo.start.x, combo.start.y, combo.start.x + combobox_width, combo.start.y + combobox_height, c);
+	char combo_str[30];
+	sprintf(combo_str, "Combo x %d", combo.count);
+	al_draw_text(font, al_map_rgb(255, 255, 255), combo.start.x, combo.start.y, 0, combo_str);
+}
+void DrawAllCombos() {
+	loop(ComboObject, ComboList, i, 0, combo, node)
+		DrawCombo(*combo);
+	endloop
+}
 void EndDrawing() {
-	//al_draw_text(font, getcolor(Red), 50, 100, 0, "Test");
+	DrawGameTableEdges();
+	DrawAllCombos();
 	al_flip_display();
 }
 void SetEmpty(List positionList) {
@@ -417,13 +453,6 @@ List FallColumn(int colNo) {
 			Position pos; 
 			pos.x = obj.start.x;
 			pos.y = obj.endRow;
-			obj.isBomb = False;
-			loop(Position,BombList,j,0,bombpos,node2)
-				if (obj.start.x == bombpos->x && obj.start.y == bombpos->y) {
-					obj.isBomb = True;
-					bombpos->y = obj.endRow;
-				}
-			endloop
 			ADD(FallingObject, fallList, obj);
 		}
 		if (i >= colList.Length - 2) break;
@@ -460,7 +489,7 @@ void FallHandler() {
 					}
 					Location p1, p2;
 					GetFallingObjectLocation(*obj, &p1, &p2);
-					DrawNodeByLocation(p1, p2, obj->color, obj->isBomb);
+					DrawNodeByLocation(p1, p2, obj->color);
 				endloop
 			}
 			EndDrawing();
@@ -503,14 +532,12 @@ void Fall() {
 			newobj.start.x = i;
 			newobj.start.y = j - emptycount - 1;
 			newobj.color = rand() % COLOR_COUNT;
-			newobj.isBomb = False;
 			newobj.CompletedUnits = 0;
 			newobj.endRow = j;
 			if (BombPercent >= 100) {
 				int isbomb = rand() % 5;
 				if (isbomb == 1) {
-					newobj.isBomb = True;
-					AddBomb(newobj.start.x, newobj.endRow);
+					newobj.color += COLOR_COUNT;
 					int destroy = rand() % 2;
 					if (destroy == 1) BombPercent -= 100;
 				}
@@ -533,20 +560,26 @@ int Explode() {
 	int exploded = 0;
 	List exp;
 	Bool isExploding = True;
-	Combo = 0;
+	ComboObject combo;
+	combo.count = 0;
 	do {
 		isExploding = False;
 		exp = SearchForExplode();
 		loop(List, exp, i, 0, colorposlist, node)
 			loop(List, (*colorposlist), j, 0, poslist, node2)
-				loop(Position, BombList, k, 0, bombpos, node3)
-					if (isPositionExists(*bombpos, *poslist)) ExplodeBomb(k);
-				endloop
 				if (poslist->Length > 0) {
+					loop(Position, (*poslist), k, 0, pos, node3)
+						Color colorrr = GetPositionColor(*pos);
+						if (GetPositionColor(*pos) > COLOR_COUNT) ExplodeBomb(*pos);
+					endloop
 					isExploding = True;
 					exploded += poslist->Length;
 					SetEmpty(*poslist);
-					Combo++;
+					Location p1, p2;
+					Position p = GET(Position, (*poslist), 0);
+					GetNodeLocation(p, &p1, &p2);
+					combo.start = p2;
+					combo.count++;
 				}
 			endloop
 		endloop
@@ -556,7 +589,11 @@ int Explode() {
 		FillEmptyNodes();
 	} while (isExploding);
 	if (isGameActive) {
-		Score += (Combo + 1) * 77 * exploded;
+		Score += (combo.count + 1) * 77 * exploded;
+		if (combo.count > 1) {
+			combo.timestamp = time(NULL);
+			ADD(ComboObject, ComboList, combo);
+		}
 		BombPercent += exploded * 2;
 	}
 	
@@ -607,7 +644,6 @@ void MoveRow(int rowno, float shift) {
 		Position pos;
 		pos.x = i;
 		pos.y = rowno;
-		Bool isbomb = isPositionExists(pos, BombList);
 		GetNodeLocation(pos, &p1, &p2);
 		ModShift(&shift);
 		p1.x += shift;
@@ -619,16 +655,19 @@ void MoveRow(int rowno, float shift) {
 		if (p2.x > end.x) {
 			float remaining = p2.x - end.x;
 			Location right_end;
-			right_end.x = p1.x + Unit - Unit*Margin;
+			right_end.x = end.x;
 			right_end.y = p2.y;
 			Location left_start;
-			left_start.x = start.x + remaining - Unit*Margin * 2;
+			left_start.x = start.x + remaining - Unit;
 			left_start.y = p1.y;
-			al_draw_filled_rectangle(p1.x, p1.y, end.x, p2.y, getcolor(*color));
-			al_draw_filled_rectangle(start.x, p1.y, start.x + remaining - Unit*Margin * 2, p2.y, getcolor(*color));
+			Location left_end;
+			left_end.x = start.x + remaining - Unit*Margin * 2;
+			left_end.y = p2.y;
+			DrawNodeByLocation(p1, right_end, *color);
+			DrawNodeByLocation(left_start, left_end, *color);
 		}
 		else {
-			DrawNodeByLocation(p1, p2, *color, isbomb);
+			DrawNodeByLocation(p1, p2, *color);
 		}
 	endloop
 }
@@ -649,7 +688,6 @@ void MoveColumn(int colno, float shift) {
 		Position pos;
 		pos.x = colno;
 		pos.y = i;
-		Bool isbomb = isPositionExists(pos, BombList);
 		GetNodeLocation(pos, &p1, &p2);
 		ModShift(&shift);
 		p1.y += shift;
@@ -660,11 +698,18 @@ void MoveColumn(int colno, float shift) {
 		}
 		if (p2.y > end.y) {
 			float remaining = p2.y - end.y;
-			al_draw_filled_rectangle(p1.x, p1.y, p2.x, end.y, getcolor(*color));
-			al_draw_filled_rectangle(p1.x, start.y, p2.x, start.y + remaining - Unit*Margin * 2, getcolor(*color));
+			Location top_start, top_end, bottom_end;
+			top_end.x = p2.x;
+			top_end.y = start.y + remaining - Unit*Margin;
+			top_start.x = p1.x;
+			top_start.y = top_end.y - Unit + Unit*Margin;
+			DrawNodeByLocation(top_start, top_end, *color);
+			bottom_end.x = p2.x;
+			bottom_end.y = p1.y + Unit - Unit*Margin;
+			DrawNodeByLocation(p1, bottom_end, *color);
 		}
 		else {
-			DrawNodeByLocation(p1, p2, *color, isbomb);
+			DrawNodeByLocation(p1, p2, *color);
 		}
 	endloop
 }
@@ -700,6 +745,7 @@ void MouseMoveEventHandler() {
 		mousestart = GetPositionOnTable(mouse.start);
 		MoveColumn(mousestart.x, mouse.state.y - mouse.start.y);
 	}
+	DrawGameTableEdges();
 }
 void ShiftRow(int rowNo) {
 	Color temp = Table[rowNo][0];
@@ -722,13 +768,22 @@ void ShiftColumn(int colNo) {
 	}
 	Table[COLOR_COUNT - 1][colNo] = temp;
 }
+void GameOver() {
+	Location start;
+	start.x = GameTableStart.x + GameTableLength / 2 - 150;
+	start.y = GameTableStart.y + GameTableLength / 2 - 25;
+	al_draw_filled_rectangle(start.x, start.y, start.x + 300, start.y + 100, al_map_rgb(0, 0, 0));
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x ,start.y , 0, "Time is up! Game Over");
+	char score_str[30];
+	sprintf(score_str, "Final Score : %d", Score);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x, start.y + 50, 0, score_str);
+	isGameActive = False;
+}
+
+
 void DrawScoreTable() {
 	char str[20];
 	sprintf(str, "Score : %d", Score);
-	ALLEGRO_BITMAP * bar;
-	path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
-	al_set_path_filename(path, "bar1.png");
-	bar = al_load_bitmap(al_path_cstr(path, '/'));
 	int w = width - GameTableStart.x - GameTableLength - Unit;
 	int h = GameTableLength / 15;
 	Position start,end;
@@ -736,17 +791,14 @@ void DrawScoreTable() {
 	start.y = GameTableStart.y;
 	end.x = start.x + w;
 	end.y = start.y + h;
-	al_draw_scaled_bitmap(bar, 0, 0, 800, 338, start.x, start.y, w, h, 0);
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x-start.x)/2, start.y + (end.y - start.y) / 4, 0, str);
+	al_draw_scaled_bitmap(ScoreTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
 }
 void DrawTimerTable() {
 	char str[20];
 	int seconds = (int)(StartedTime - (unsigned long)time(NULL));
-	sprintf(str, "Time : %d", 60+seconds);
-	ALLEGRO_BITMAP * bar;
-	path = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
-	al_set_path_filename(path, "bar1.png");
-	bar = al_load_bitmap(al_path_cstr(path, '/'));
+	if (seconds <= -GameTime) GameOver();
+	sprintf(str, "Time : %d", GameTime+seconds);
 	int w = width - GameTableStart.x - GameTableLength - Unit;
 	int h = GameTableLength / 15;
 	Position start, end;
@@ -754,8 +806,8 @@ void DrawTimerTable() {
 	start.y = GameTableStart.y + h + 10;
 	end.x = start.x + w;
 	end.y = start.y + h;
-	al_draw_scaled_bitmap(bar, 0, 0, 800, 338, start.x, start.y, w, h, 0);
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 2, start.y + (end.y - start.y) / 4, 0, str);
+	al_draw_scaled_bitmap(TimerTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
 }
 void MouseUpEventHandler() {
 	mouse.isActive = False;
@@ -801,6 +853,7 @@ int main() {
 	al_register_event_source(queue, al_get_timer_event_source(timer));
 	al_register_event_source(queue, al_get_mouse_event_source());
 	al_start_timer(timer);
+
 	while (isGameActive) {
 		ALLEGRO_EVENT e;
 		al_wait_for_event(queue, &e);
