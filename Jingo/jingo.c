@@ -299,14 +299,6 @@ void DrawTable() {
 	DrawTableBackground();
 	DrawNodes();
 }
-void DrawMenuItem(char * s, Position pos) {
-	al_draw_text(font, getcolor(Red), pos.x, pos.y, 0, s);
-}
-void DrawMenu() {
-	DrawTableBackground();
-	DrawMenuItem("Deneme", NewPosition(100, 100));
-
-}
 Color GetPositionColor(Position pos) {
 	return Table[pos.y][pos.x];
 }
@@ -424,9 +416,51 @@ void DrawAllCombos() {
 		DrawCombo(*combo);
 	endloop
 }
+
+void GameOver() {
+	Location start;
+	start.x = GameTableStart.x + GameTableLength / 2 - 150;
+	start.y = GameTableStart.y + GameTableLength / 2 - 25;
+	al_draw_filled_rectangle(start.x, start.y, start.x + 300, start.y + 100, al_map_rgb(0, 0, 0));
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x, start.y, 0, "Time is up! Game Over");
+	char score_str[30];
+	sprintf(score_str, "Final Score : %d", Score);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x, start.y + 50, 0, score_str);
+	isGameActive = False;
+}
+void DrawScoreTable() {
+	char str[20];
+	sprintf(str, "Score : %d", Score);
+	int w = width - GameTableStart.x - GameTableLength;
+	int h = GameTableLength / 15;
+	Position start, end;
+	start.x = GameTableStart.x + GameTableLength;
+	start.y = GameTableStart.y;
+	end.x = start.x + w;
+	end.y = start.y + h;
+	al_draw_scaled_bitmap(ScoreTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
+}
+void DrawTimerTable() {
+	char str[20];
+	int seconds = (int)(StartedTime - (unsigned long)time(NULL));
+	if (seconds <= -GameTime) GameOver();
+	sprintf(str, "Time : %d", GameTime + seconds);
+	int w = width - GameTableStart.x - GameTableLength;
+	int h = GameTableLength / 15;
+	Position start, end;
+	start.x = GameTableStart.x + GameTableLength;
+	start.y = GameTableStart.y + h + 10;
+	end.x = start.x + w;
+	end.y = start.y + h;
+	al_draw_scaled_bitmap(TimerTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
+	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
+}
 void EndDrawing() {
 	DrawGameTableEdges();
 	DrawAllCombos();
+	DrawScoreTable();
+	DrawTimerTable();
 	al_flip_display();
 }
 void SetEmpty(List positionList) {
@@ -768,47 +802,9 @@ void ShiftColumn(int colNo) {
 	}
 	Table[COLOR_COUNT - 1][colNo] = temp;
 }
-void GameOver() {
-	Location start;
-	start.x = GameTableStart.x + GameTableLength / 2 - 150;
-	start.y = GameTableStart.y + GameTableLength / 2 - 25;
-	al_draw_filled_rectangle(start.x, start.y, start.x + 300, start.y + 100, al_map_rgb(0, 0, 0));
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x ,start.y , 0, "Time is up! Game Over");
-	char score_str[30];
-	sprintf(score_str, "Final Score : %d", Score);
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x, start.y + 50, 0, score_str);
-	isGameActive = False;
-}
 
 
-void DrawScoreTable() {
-	char str[20];
-	sprintf(str, "Score : %d", Score);
-	int w = width - GameTableStart.x - GameTableLength - Unit;
-	int h = GameTableLength / 15;
-	Position start,end;
-	start.x = GameTableStart.x + GameTableLength + Unit;
-	start.y = GameTableStart.y;
-	end.x = start.x + w;
-	end.y = start.y + h;
-	al_draw_scaled_bitmap(ScoreTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
-}
-void DrawTimerTable() {
-	char str[20];
-	int seconds = (int)(StartedTime - (unsigned long)time(NULL));
-	if (seconds <= -GameTime) GameOver();
-	sprintf(str, "Time : %d", GameTime+seconds);
-	int w = width - GameTableStart.x - GameTableLength - Unit;
-	int h = GameTableLength / 15;
-	Position start, end;
-	start.x = GameTableStart.x + GameTableLength + Unit;
-	start.y = GameTableStart.y + h + 10;
-	end.x = start.x + w;
-	end.y = start.y + h;
-	al_draw_scaled_bitmap(TimerTableImage, 0, 0, 800, 338, start.x, start.y, w, h, 0);
-	al_draw_text(font, al_map_rgb(255, 255, 255), start.x + (end.x - start.x) / 10, start.y + (end.y - start.y) / 10, 0, str);
-}
+
 void MouseUpEventHandler() {
 	mouse.isActive = False;
 	al_get_mouse_state(&mouse.state);
@@ -842,8 +838,7 @@ void MouseDownEventHandler() {
 	mouse.direction = None;
 }
 void TimerEventHandler() {
-	DrawScoreTable();
-	DrawTimerTable();
+	
 }
 int main() {
 	Start();
