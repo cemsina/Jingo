@@ -394,6 +394,7 @@ List SearchForExplode() {
 	return explodes;
 }
 void StartDrawing() {
+	al_clear_to_color(al_map_rgb(0, 0, 0));
 	DrawTable();
 }
 void DrawCombo(ComboObject combo) {
