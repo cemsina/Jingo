@@ -19,7 +19,7 @@
 #include <math.h>
 #include <string.h>
 #define COLOR_COUNT 8
-#define ADD(type,list,item) {ListNode * n = NewListNode();if(list.Length == 0){list.start = n;list.end = n;}else{list.end->next = n;list.end = n;}   (type *) n->pointer = (type *)malloc(sizeof(type));\
+#define ADD(type,list,item) {ListNode * n = NewListNode();if(list.Length == 0){list.start = n;list.end = n;}else{list.end->next = n;list.end = n;}   n->pointer = malloc(sizeof(type));\
 								*((type *)n->pointer) = item;list.Length++;}
 #define GET_PTR(type,list,i)	(type *) Get(list,i)
 #define GET(type,list,i) *GET_PTR(type,list,i)
